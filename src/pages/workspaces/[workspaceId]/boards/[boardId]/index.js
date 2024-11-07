@@ -71,11 +71,13 @@ const BoardPage = () => {
     // Recopilar etiquetas únicas de las listas cargadas
     const etiquetasSet = new Set();
     lists.forEach(list => {
-      list.cards.forEach(card => {
-        if (card.etiqueta) {
-          etiquetasSet.add(card.etiqueta);
-        }
-      });
+      if (list.cards && Array.isArray(list.cards)) {
+        list.cards.forEach(card => {
+          if (card.etiqueta) {
+            etiquetasSet.add(card.etiqueta);
+          }
+        });
+      }
     });
     setEtiquetas([...etiquetasSet]);
   }, [lists]);
@@ -269,7 +271,7 @@ const BoardPage = () => {
                 Límite máximo de tareas: {list.maxwip}
               </Typography>
               <Box mt={2}>
-                {filtrarTarjetas(list.cards).map((card) => (
+                {filtrarTarjetas(list.cards ?? []).map((card) => (
                   <Box
                     key={card.id}
                     mb={1}
@@ -277,7 +279,7 @@ const BoardPage = () => {
                     border={1}
                     borderRadius={2}
                     borderColor="grey.300"
-                    bgcolor="rgba(255, 235, 59, 0.3)" // Fondo amarillo claro
+                    bgcolor={card.atrasada ? "rgba(255, 100, 100, 0.3)" : "rgba(255, 235, 59, 0.3)"} // Fondo rojo claro si está atrasada
                   >
                     <Box display="flex" justifyContent="space-between" alignItems="center">
                       <Box>
@@ -343,6 +345,8 @@ const BoardPage = () => {
 };
 
 export default BoardPage;
+
+
 
 
 
