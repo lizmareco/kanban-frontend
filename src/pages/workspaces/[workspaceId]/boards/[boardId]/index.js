@@ -1,19 +1,20 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/router';
 import axiosInstance from '/src/utils/axiosInstance';
-import { Box, Button, TextField, Typography, IconButton, CircularProgress, Grid, Dialog, DialogTitle, DialogContent, DialogActions } from '@mui/material';
+import { Box, Button, TextField, Typography, IconButton, CircularProgress, Grid, Dialog, DialogTitle, DialogContent, DialogActions, FormControl, InputLabel, Select, MenuItem } from '@mui/material';
 import DeleteIcon from '@mui/icons-material/Delete';
 import EditIcon from '@mui/icons-material/Edit';
 import CheckIcon from '@mui/icons-material/Check';
 import CloseIcon from '@mui/icons-material/Close';
 import CardForm from '/src/components/Board/CardForm';
 
-
 const BoardPage = () => {
   const router = useRouter();
   const { workspaceId, boardId } = router.query;
 
   const [lists, setLists] = useState([]);
+  const [usuarios, setUsuarios] = useState([]);
+  const [etiquetas, setEtiquetas] = useState([]);
   const [loading, setLoading] = useState(true);
   const [newListName, setNewListName] = useState('');
   const [maxWIP, setMaxWIP] = useState('');
@@ -23,7 +24,8 @@ const BoardPage = () => {
   const [editedListName, setEditedListName] = useState('');
   const [showCardFormForList, setShowCardFormForList] = useState(null); // Lista para la cual se está mostrando el formulario
   const [dialogOpen, setDialogOpen] = useState(false); // Estado para el diálogo emergente
-
+  const [showDeleteCardDialog, setShowDeleteCardDialog] = useState(false); // Estado para mostrar el diálogo de eliminación de tarjeta
+  const [cardToDelete, setCardToDelete] = useState(null); // Tarjeta seleccionada para eliminar
 
   const handleCardAdded = async () => {
     // Actualizar las listas después de agregar una tarjeta
@@ -31,7 +33,6 @@ const BoardPage = () => {
     setLists(res.data);
     setDialogOpen(false); // Cerrar el diálogo después de agregar la tarjeta
   };
-
 
   useEffect(() => {
     if (workspaceId && boardId) {
@@ -51,9 +52,33 @@ const BoardPage = () => {
           setLoading(false);
         }
       };
+
+      const fetchUsuarios = async () => {
+        try {
+          const res = await axiosInstance.get('/users');
+          setUsuarios(res.data);
+        } catch (error) {
+          console.error('Error al obtener los usuarios:', error);
+        }
+      };
+
       fetchLists();
+      fetchUsuarios();
     }
   }, [workspaceId, boardId]);
+
+  useEffect(() => {
+    // Recopilar etiquetas únicas de las listas cargadas
+    const etiquetasSet = new Set();
+    lists.forEach(list => {
+      list.cards.forEach(card => {
+        if (card.etiqueta) {
+          etiquetasSet.add(card.etiqueta);
+        }
+      });
+    });
+    setEtiquetas([...etiquetasSet]);
+  }, [lists]);
 
   // Filtrar las tarjetas según el usuario asignado y la etiqueta
   const filtrarTarjetas = (cards = []) => {
@@ -106,6 +131,23 @@ const BoardPage = () => {
     }
   };
 
+  // Manejar la eliminación de una tarjeta
+  const handleDeleteCard = async () => {
+    if (!cardToDelete) return;
+
+    try {
+      await axiosInstance.delete(`/cards/${cardToDelete.id}`);
+      setLists(lists.map((list) => ({
+        ...list,
+        cards: list.cards.filter((card) => card.id !== cardToDelete.id),
+      })));
+      setShowDeleteCardDialog(false);
+      setCardToDelete(null);
+    } catch (error) {
+      console.error('Error al eliminar la tarjeta:', error);
+    }
+  };
+
   const handleOpenCardForm = (listId) => {
     setShowCardFormForList(listId);
     setDialogOpen(true); // Abrir el diálogo cuando se hace clic en "Agregar Tarjeta"
@@ -129,20 +171,41 @@ const BoardPage = () => {
 
       {/* Filtros para tareas */}
       <Box display="flex" mb={2}>
-        <TextField
-          label="Filtrar por usuario"
-          value={usuarioFiltro}
-          onChange={(e) => setUsuarioFiltro(e.target.value)}
-          margin="normal"
-          sx={{ mr: 1, width: '150px' }}
-        />
-        <TextField
-          label="Filtrar por etiqueta"
-          value={etiquetaFiltro}
-          onChange={(e) => setEtiquetaFiltro(e.target.value)}
-          margin="normal"
-          sx={{ mr: 1, width: '150px' }}
-        />
+        <FormControl sx={{ mr: 2, width: '150px' }} margin="normal">
+          <InputLabel>Filtrar por usuario</InputLabel>
+          <Select
+            value={usuarioFiltro}
+            onChange={(e) => setUsuarioFiltro(e.target.value)}
+            label="Filtrar por usuario"
+          >
+            <MenuItem value="">
+              <em>Ninguno</em>
+            </MenuItem>
+            {usuarios.map((usuario) => (
+              <MenuItem key={usuario.id} value={usuario.id}>
+                {usuario.nombre} ({usuario.email})
+              </MenuItem>
+            ))}
+          </Select>
+        </FormControl>
+
+        <FormControl sx={{ mr: 2, width: '150px' }} margin="normal">
+          <InputLabel>Filtrar por etiqueta</InputLabel>
+          <Select
+            value={etiquetaFiltro}
+            onChange={(e) => setEtiquetaFiltro(e.target.value)}
+            label="Filtrar por etiqueta"
+          >
+            <MenuItem value="">
+              <em>Ninguna</em>
+            </MenuItem>
+            {etiquetas.map((etiqueta, index) => (
+              <MenuItem key={index} value={etiqueta}>
+                {etiqueta}
+              </MenuItem>
+            ))}
+          </Select>
+        </FormControl>
       </Box>
 
       {/* Formulario para agregar nueva lista */}
@@ -207,15 +270,30 @@ const BoardPage = () => {
               </Typography>
               <Box mt={2}>
                 {filtrarTarjetas(list.cards).map((card) => (
-                  <Box key={card.id} mb={1} p={2} border={1} borderRadius={2} borderColor="grey.300">
-                    <Typography variant="body1" noWrap>{card.nombre}</Typography>
-                    <Typography variant="body2" noWrap>{card.descripcion}</Typography>
-                    {card.etiqueta && <Typography variant="body2">Etiqueta: {card.etiqueta}</Typography>}
-                    {card.atrasada && (
-                      <Typography variant="body2" color="error">
-                        ¡Atrasada!
-                      </Typography>
-                    )}
+                  <Box
+                    key={card.id}
+                    mb={1}
+                    p={2}
+                    border={1}
+                    borderRadius={2}
+                    borderColor="grey.300"
+                    bgcolor="rgba(255, 235, 59, 0.3)" // Fondo amarillo claro
+                  >
+                    <Box display="flex" justifyContent="space-between" alignItems="center">
+                      <Box>
+                        <Typography variant="body1" noWrap>{card.nombre}</Typography>
+                        <Typography variant="body2" noWrap>{card.descripcion}</Typography>
+                        {card.etiqueta && <Typography variant="body2">Etiqueta: {card.etiqueta}</Typography>}
+                        {card.atrasada && (
+                          <Typography variant="body2" color="error">
+                            ¡Atrasada!
+                          </Typography>
+                        )}
+                      </Box>
+                      <IconButton color="error" onClick={() => { setShowDeleteCardDialog(true); setCardToDelete(card); }}>
+                        <DeleteIcon />
+                      </IconButton>
+                    </Box>
                   </Box>
                 ))}
               </Box>
@@ -244,11 +322,30 @@ const BoardPage = () => {
           <Button onClick={handleCloseDialog} color="secondary">Cancelar</Button>
         </DialogActions>
       </Dialog>
+
+      {/* Diálogo para confirmar eliminación de tarjeta */}
+      <Dialog open={showDeleteCardDialog} onClose={() => setShowDeleteCardDialog(false)}>
+        <DialogTitle>Eliminar Tarjeta</DialogTitle>
+        <DialogContent>
+          <Typography>¿Estás seguro de que deseas eliminar esta tarjeta?</Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setShowDeleteCardDialog(false)} color="primary">
+            Cancelar
+          </Button>
+          <Button onClick={handleDeleteCard} color="error">
+            Eliminar
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 };
 
 export default BoardPage;
+
+
+
 
 
 
