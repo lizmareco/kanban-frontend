@@ -1,20 +1,19 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/router';
 import axiosInstance from '/src/utils/axiosInstance';
-import { Box, Button, TextField, Typography, IconButton, CircularProgress, Grid, Dialog, DialogTitle, DialogContent, DialogActions, FormControl, InputLabel, Select, MenuItem } from '@mui/material';
+import { Box, Button, TextField, Typography, IconButton, CircularProgress, Grid, Dialog, DialogTitle, DialogContent, DialogActions, Select, MenuItem, FormControl, InputLabel } from '@mui/material';
 import DeleteIcon from '@mui/icons-material/Delete';
 import EditIcon from '@mui/icons-material/Edit';
 import CheckIcon from '@mui/icons-material/Check';
 import CloseIcon from '@mui/icons-material/Close';
 import CardForm from '/src/components/Board/CardForm';
+import { DragDropContext, Droppable, Draggable } from 'react-beautiful-dnd';
 
 const BoardPage = () => {
   const router = useRouter();
   const { workspaceId, boardId } = router.query;
 
   const [lists, setLists] = useState([]);
-  const [usuarios, setUsuarios] = useState([]);
-  const [etiquetas, setEtiquetas] = useState([]);
   const [loading, setLoading] = useState(true);
   const [newListName, setNewListName] = useState('');
   const [maxWIP, setMaxWIP] = useState('');
@@ -22,28 +21,44 @@ const BoardPage = () => {
   const [etiquetaFiltro, setEtiquetaFiltro] = useState('');
   const [editingListId, setEditingListId] = useState(null);
   const [editedListName, setEditedListName] = useState('');
-  const [showCardFormForList, setShowCardFormForList] = useState(null); // Lista para la cual se está mostrando el formulario
-  const [dialogOpen, setDialogOpen] = useState(false); // Estado para el diálogo emergente
-  const [showDeleteCardDialog, setShowDeleteCardDialog] = useState(false); // Estado para mostrar el diálogo de eliminación de tarjeta
-  const [cardToDelete, setCardToDelete] = useState(null); // Tarjeta seleccionada para eliminar
+  const [showCardFormForList, setShowCardFormForList] = useState(null);
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [showDeleteCardDialog, setShowDeleteCardDialog] = useState(false);
+  const [cardToDelete, setCardToDelete] = useState(null);
+  const [usuarios, setUsuarios] = useState([]);
+  const [etiquetas, setEtiquetas] = useState([]);
 
   const handleCardAdded = async () => {
-    // Actualizar las listas después de agregar una tarjeta
     const res = await axiosInstance.get(`/lists/board/${boardId}`);
     setLists(res.data);
-    setDialogOpen(false); // Cerrar el diálogo después de agregar la tarjeta
+    setDialogOpen(false);
   };
 
   useEffect(() => {
     if (workspaceId && boardId) {
-      const fetchLists = async () => {
+      const fetchData = async () => {
         try {
-          console.log('Obteniendo listas para el workspaceId:', workspaceId, 'y boardId:', boardId);
+          // Obtener las listas y tarjetas del tablero
           const res = await axiosInstance.get(`/lists/board/${boardId}`);
-          console.log('Respuesta del servidor al obtener las listas:', res.data);
           setLists(res.data);
+
+          // Obtener usuarios del sistema
+          const usuariosRes = await axiosInstance.get('/users');
+          setUsuarios(usuariosRes.data);
+
+          // Obtener etiquetas de las tarjetas
+          const etiquetasSet = new Set();
+
+          res.data.forEach((list) => {
+            list.cards.forEach((card) => {
+              if (card.etiqueta) {
+                etiquetasSet.add(card.etiqueta);
+              }
+            });
+          });
+
+          setEtiquetas([...etiquetasSet]);
         } catch (error) {
-          console.error('Error al obtener las listas:', error.response ? error.response.data : error.message);
           if (error.response && error.response.status === 401) {
             alert('Sesión expirada, por favor inicia sesión nuevamente.');
             router.push('/login');
@@ -52,37 +67,10 @@ const BoardPage = () => {
           setLoading(false);
         }
       };
-
-      const fetchUsuarios = async () => {
-        try {
-          const res = await axiosInstance.get('/users');
-          setUsuarios(res.data);
-        } catch (error) {
-          console.error('Error al obtener los usuarios:', error);
-        }
-      };
-
-      fetchLists();
-      fetchUsuarios();
+      fetchData();
     }
   }, [workspaceId, boardId]);
 
-  useEffect(() => {
-    // Recopilar etiquetas únicas de las listas cargadas
-    const etiquetasSet = new Set();
-    lists.forEach(list => {
-      if (list.cards && Array.isArray(list.cards)) {
-        list.cards.forEach(card => {
-          if (card.etiqueta) {
-            etiquetasSet.add(card.etiqueta);
-          }
-        });
-      }
-    });
-    setEtiquetas([...etiquetasSet]);
-  }, [lists]);
-
-  // Filtrar las tarjetas según el usuario asignado y la etiqueta
   const filtrarTarjetas = (cards = []) => {
     return cards.filter((card) => {
       const coincideUsuario = !usuarioFiltro || card.usuario_asignado === parseInt(usuarioFiltro);
@@ -91,7 +79,6 @@ const BoardPage = () => {
     });
   };
 
-  // Agregar una nueva lista
   const handleAddList = async () => {
     if (!newListName || !maxWIP) {
       return;
@@ -102,7 +89,6 @@ const BoardPage = () => {
         maxWIP: parseInt(maxWIP, 10),
         boardId,
       });
-      console.log('Lista agregada:', res.data);
       setLists([...lists, res.data]);
       setNewListName('');
       setMaxWIP('');
@@ -111,7 +97,6 @@ const BoardPage = () => {
     }
   };
 
-  // Eliminar una lista
   const handleDeleteList = async (listId) => {
     try {
       await axiosInstance.delete(`/lists/${listId}`);
@@ -121,7 +106,6 @@ const BoardPage = () => {
     }
   };
 
-  // Confirmar el cambio del nombre de una lista
   const handleListNameChange = async () => {
     try {
       await axiosInstance.put(`/lists/${editingListId}`, { nombre: editedListName });
@@ -133,7 +117,6 @@ const BoardPage = () => {
     }
   };
 
-  // Manejar la eliminación de una tarjeta
   const handleDeleteCard = async () => {
     if (!cardToDelete) return;
 
@@ -152,11 +135,35 @@ const BoardPage = () => {
 
   const handleOpenCardForm = (listId) => {
     setShowCardFormForList(listId);
-    setDialogOpen(true); // Abrir el diálogo cuando se hace clic en "Agregar Tarjeta"
+    setDialogOpen(true);
   };
 
   const handleCloseDialog = () => {
     setDialogOpen(false);
+  };
+
+  const handleDragEnd = async (result) => {
+    const { destination, source, draggableId } = result;
+
+    if (!destination) return;
+
+    if (destination.droppableId === source.droppableId && destination.index === source.index) {
+      return;
+    }
+
+    const sourceList = lists.find((list) => list.id === parseInt(source.droppableId));
+    const destinationList = lists.find((list) => list.id === parseInt(destination.droppableId));
+    const draggedCard = sourceList.cards.find((card) => card.id === parseInt(draggableId));
+
+    sourceList.cards.splice(source.index, 1);
+    destinationList.cards.splice(destination.index, 0, draggedCard);
+
+    setLists([...lists]);
+
+    await axiosInstance.put(`/cards/${draggableId}/move`, {
+      listId: destinationList.id,
+      position: destination.index,
+    });
   };
 
   if (loading) {
@@ -168,183 +175,204 @@ const BoardPage = () => {
   }
 
   return (
-    <Box p={4}>
-      <Typography variant="h4" mb={4}>Tablero: {boardId}</Typography>
+    <DragDropContext onDragEnd={handleDragEnd}>
+      <Box p={4}>
+        <Typography variant="h4" mb={4}>Tablero: {boardId}</Typography>
 
-      {/* Filtros para tareas */}
-      <Box display="flex" mb={2}>
-        <FormControl sx={{ mr: 2, width: '150px' }} margin="normal">
-          <InputLabel>Filtrar por usuario</InputLabel>
-          <Select
-            value={usuarioFiltro}
-            onChange={(e) => setUsuarioFiltro(e.target.value)}
-            label="Filtrar por usuario"
-          >
-            <MenuItem value="">
-              <em>Ninguno</em>
-            </MenuItem>
-            {usuarios.map((usuario) => (
-              <MenuItem key={usuario.id} value={usuario.id}>
-                {usuario.nombre} ({usuario.email})
+        {/* Filtros para tareas */}
+        <Box display="flex" mb={2}>
+          <FormControl margin="normal" sx={{ mr: 1, width: '150px' }}>
+            <InputLabel>Filtrar por usuario</InputLabel>
+            <Select
+              value={usuarioFiltro}
+              onChange={(e) => setUsuarioFiltro(e.target.value)}
+            >
+              <MenuItem value="">
+                <em>Todos</em>
               </MenuItem>
-            ))}
-          </Select>
-        </FormControl>
+              {usuarios.map((usuario) => (
+                <MenuItem key={usuario.id} value={usuario.id}>
+                  {usuario.nombre}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
 
-        <FormControl sx={{ mr: 2, width: '150px' }} margin="normal">
-          <InputLabel>Filtrar por etiqueta</InputLabel>
-          <Select
-            value={etiquetaFiltro}
-            onChange={(e) => setEtiquetaFiltro(e.target.value)}
-            label="Filtrar por etiqueta"
-          >
-            <MenuItem value="">
-              <em>Ninguna</em>
-            </MenuItem>
-            {etiquetas.map((etiqueta, index) => (
-              <MenuItem key={index} value={etiqueta}>
-                {etiqueta}
+          <FormControl margin="normal" sx={{ mr: 1, width: '150px' }}>
+            <InputLabel>Filtrar por etiqueta</InputLabel>
+            <Select
+              value={etiquetaFiltro}
+              onChange={(e) => setEtiquetaFiltro(e.target.value)}
+            >
+              <MenuItem value="">
+                <em>Todas</em>
               </MenuItem>
-            ))}
-          </Select>
-        </FormControl>
-      </Box>
+              {etiquetas.map((etiqueta) => (
+                <MenuItem key={etiqueta} value={etiqueta}>
+                  {etiqueta}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+        </Box>
 
-      {/* Formulario para agregar nueva lista */}
-      <Box display="flex" mb={2}>
-        <TextField
-          label="Nombre de la Lista"
-          value={newListName}
-          onChange={(e) => setNewListName(e.target.value)}
-          margin="normal"
-          sx={{ mr: 1, width: '150px' }}
-        />
-        <TextField
-          label="Max WIP"
-          type="number"
-          value={maxWIP}
-          onChange={(e) => setMaxWIP(e.target.value)}
-          margin="normal"
-          sx={{ mr: 1, width: '100px' }}
-        />
-        <Button variant="contained" color="primary" onClick={handleAddList} sx={{ height: '56px' }}>
-          Agregar Lista
-        </Button>
-      </Box>
+        {/* Formulario para agregar nueva lista */}
+        <Box display="flex" mb={2}>
+          <TextField
+            label="Nombre de la Lista"
+            value={newListName}
+            onChange={(e) => setNewListName(e.target.value)}
+            margin="normal"
+            sx={{ mr: 1, width: '150px' }}
+          />
+          <TextField
+            label="Max WIP"
+            type="number"
+            value={maxWIP}
+            onChange={(e) => setMaxWIP(e.target.value)}
+            margin="normal"
+            sx={{ mr: 1, width: '100px' }}
+          />
+          <Button variant="contained" color="primary" onClick={handleAddList} sx={{ height: '56px' }}>
+            Agregar Lista
+          </Button>
+        </Box>
 
-      {/* Mostrar listas y tarjetas en formato tipo Kanban */}
-      <Grid container spacing={2}>
-        {lists.map((list) => (
-          <Grid item key={list.id} xs={12} sm={6} md={4} lg={3}>
-            <Box p={2} border={1} borderRadius={2} borderColor="grey.300" bgcolor="white">
-              <Box display="flex" justifyContent="space-between" alignItems="center" mb={1}>
-                {editingListId === list.id ? (
-                  <>
-                    <TextField
-                      value={editedListName}
-                      onChange={(e) => setEditedListName(e.target.value)}
-                      margin="normal"
-                      sx={{ mr: 1, width: '150px' }}
-                    />
-                    <IconButton color="primary" onClick={handleListNameChange}>
-                      <CheckIcon />
-                    </IconButton>
-                    <IconButton color="secondary" onClick={() => setEditingListId(null)}>
-                      <CloseIcon />
-                    </IconButton>
-                  </>
-                ) : (
-                  <>
-                    <Typography variant="h6" noWrap>{list.nombre}</Typography>
-                    <Box>
-                      <IconButton color="primary" onClick={() => { setEditingListId(list.id); setEditedListName(list.nombre); }}>
-                        <EditIcon />
+        {/* Mostrar listas y tarjetas en formato tipo Kanban */}
+        <Grid container spacing={2}>
+          {lists.map((list) => (
+            <Grid item key={list.id} xs={12} sm={6} md={4} lg={3}>
+              <Box p={2} border={1} borderRadius={2} borderColor="grey.300" bgcolor="white">
+                <Box display="flex" justifyContent="space-between" alignItems="center" mb={1}>
+                  {editingListId === list.id ? (
+                    <>
+                      <TextField
+                        value={editedListName}
+                        onChange={(e) => setEditedListName(e.target.value)}
+                        margin="normal"
+                        sx={{ mr: 1, width: '150px' }}
+                      />
+                      <IconButton color="primary" onClick={handleListNameChange}>
+                        <CheckIcon />
                       </IconButton>
-                      <IconButton color="error" onClick={() => handleDeleteList(list.id)}>
-                        <DeleteIcon />
+                      <IconButton color="secondary" onClick={() => setEditingListId(null)}>
+                        <CloseIcon />
                       </IconButton>
-                    </Box>
-                  </>
-                )}
-              </Box>
-              <Typography variant="body2" color="text.secondary" mb={2}>
-                Límite máximo de tareas: {list.maxwip}
-              </Typography>
-              <Box mt={2}>
-                {filtrarTarjetas(list.cards ?? []).map((card) => (
-                  <Box
-                    key={card.id}
-                    mb={1}
-                    p={2}
-                    border={1}
-                    borderRadius={2}
-                    borderColor="grey.300"
-                    bgcolor={card.atrasada ? "rgba(255, 100, 100, 0.3)" : "rgba(255, 235, 59, 0.3)"} // Fondo rojo claro si está atrasada
-                  >
-                    <Box display="flex" justifyContent="space-between" alignItems="center">
+                    </>
+                  ) : (
+                    <>
+                      <Typography variant="h6" noWrap>{list.nombre}</Typography>
                       <Box>
-                        <Typography variant="body1" noWrap>{card.nombre}</Typography>
-                        <Typography variant="body2" noWrap>{card.descripcion}</Typography>
-                        {card.etiqueta && <Typography variant="body2">Etiqueta: {card.etiqueta}</Typography>}
-                        {card.atrasada && (
-                          <Typography variant="body2" color="error">
-                            ¡Atrasada!
-                          </Typography>
-                        )}
+                        <IconButton color="primary" onClick={() => { setEditingListId(list.id); setEditedListName(list.nombre); }}>
+                          <EditIcon />
+                        </IconButton>
+                        <IconButton color="error" onClick={() => handleDeleteList(list.id)}>
+                          <DeleteIcon />
+                        </IconButton>
                       </Box>
-                      <IconButton color="error" onClick={() => { setShowDeleteCardDialog(true); setCardToDelete(card); }}>
-                        <DeleteIcon />
-                      </IconButton>
+                    </>
+                  )}
+                </Box>
+                <Typography variant="body2" color="text.secondary" mb={2}>
+                  Límite máximo de tareas: {list.maxwip}
+                </Typography>
+                <Droppable droppableId={`${list.id}`}>
+                  {(provided) => (
+                    <Box ref={provided.innerRef} {...provided.droppableProps} mt={2}>
+                      {filtrarTarjetas(list.cards).map((card, index) => (
+                        <Draggable key={card.id} draggableId={`${card.id}`} index={index}>
+                          {(provided) => (
+                            <Box
+                              ref={provided.innerRef}
+                              {...provided.draggableProps}
+                              {...provided.dragHandleProps}
+                              mb={1}
+                              p={2}
+                              border={1}
+                              borderRadius={2}
+                              borderColor="grey.300"
+                              bgcolor="rgba(255, 235, 59, 0.3)"
+                            >
+                              <Box display="flex" justifyContent="space-between" alignItems="center">
+                                <Box>
+                                  <Typography variant="body1" noWrap>{card.nombre}</Typography>
+                                  <Typography variant="body2" noWrap>{card.descripcion}</Typography>
+                                  {card.etiqueta && <Typography variant="body2">Etiqueta: {card.etiqueta}</Typography>}
+                                  {card.usuario_nombre && (
+                                    <Typography variant="body2">Asignado a: {card.usuario_nombre}</Typography>
+                                  )}
+                                  {card.atrasada && (
+                                    <Typography variant="body2" color="error">
+                                      ¡Atrasada!
+                                    </Typography>
+                                  )}
+                                </Box>
+                                <IconButton color="error" onClick={() => { setShowDeleteCardDialog(true); setCardToDelete(card); }}>
+                                  <DeleteIcon />
+                                </IconButton>
+                              </Box>
+                            </Box>
+                          )}
+                        </Draggable>
+                      ))}
+                      {provided.placeholder}
                     </Box>
-                  </Box>
-                ))}
+                  )}
+                </Droppable>
+                <Button
+                  variant="contained"
+                  color="primary"
+                  onClick={() => handleOpenCardForm(list.id)}
+                  sx={{ mt: 2 }}
+                >
+                  Agregar Tarjeta
+                </Button>
               </Box>
-              <Button
-                variant="contained"
-                color="primary"
-                onClick={() => handleOpenCardForm(list.id)}
-                sx={{ mt: 2 }}
-              >
-                Agregar Tarjeta
-              </Button>
-            </Box>
-          </Grid>
-        ))}
-      </Grid>
+            </Grid>
+          ))}
+        </Grid>
 
-      {/* Diálogo emergente para agregar tarjetas */}
-      <Dialog open={dialogOpen} onClose={handleCloseDialog}>
-        <DialogTitle>Agregar Tarjeta</DialogTitle>
-        <DialogContent>
-          {showCardFormForList && (
-            <CardForm listId={showCardFormForList} onCardAdded={handleCardAdded} />
-          )}
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={handleCloseDialog} color="secondary">Cancelar</Button>
-        </DialogActions>
-      </Dialog>
+        {/* Diálogo emergente para agregar tarjetas */}
+        <Dialog open={dialogOpen} onClose={handleCloseDialog}>
+          <DialogTitle>Agregar Tarjeta</DialogTitle>
+          <DialogContent>
+            {showCardFormForList && (
+              <CardForm listId={showCardFormForList} onCardAdded={handleCardAdded} />
+            )}
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={handleCloseDialog} color="secondary">Cancelar</Button>
+          </DialogActions>
+        </Dialog>
 
-      {/* Diálogo para confirmar eliminación de tarjeta */}
-      <Dialog open={showDeleteCardDialog} onClose={() => setShowDeleteCardDialog(false)}>
-        <DialogTitle>Eliminar Tarjeta</DialogTitle>
-        <DialogContent>
-          <Typography>¿Estás seguro de que deseas eliminar esta tarjeta?</Typography>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setShowDeleteCardDialog(false)} color="primary">
-            Cancelar
-          </Button>
-          <Button onClick={handleDeleteCard} color="error">
-            Eliminar
-          </Button>
-        </DialogActions>
-      </Dialog>
-    </Box>
+        {/* Diálogo para confirmar eliminación de tarjeta */}
+        <Dialog open={showDeleteCardDialog} onClose={() => setShowDeleteCardDialog(false)}>
+          <DialogTitle>Eliminar Tarjeta</DialogTitle>
+          <DialogContent>
+            <Typography>¿Estás seguro de que deseas eliminar esta tarjeta?</Typography>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setShowDeleteCardDialog(false)} color="primary">
+              Cancelar
+            </Button>
+            <Button onClick={handleDeleteCard} color="error">
+              Eliminar
+            </Button>
+          </DialogActions>
+        </Dialog>
+      </Box>
+    </DragDropContext>
   );
 };
 
 export default BoardPage;
+
+
+
+
+
+
+
 
 
 
