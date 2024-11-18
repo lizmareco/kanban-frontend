@@ -27,7 +27,6 @@ ChartJS.register(
 );
 
 const DashboardPage = () => {
-  
   const router = useRouter();
   const { workspaceId, boardId } = router.query;
 
@@ -46,8 +45,13 @@ const DashboardPage = () => {
           const dashboardRes = await axiosInstance.get(`/dashboard/boards/${boardId}`);
           const { tasksByStatus, overdueTasks, tasksByUser } = dashboardRes.data;
 
+          // Filtrar los datos para evitar que se muestren estados vacíos o duplicados
+          const filteredTasksByStatus = Object.fromEntries(
+            Object.entries(tasksByStatus).filter(([key, value]) => value > 0)
+          );
+
           setCardsData({
-            tasksByStatus,
+            tasksByStatus: filteredTasksByStatus,
             overdueTasks,
             tasksByUser,
           });
@@ -72,6 +76,7 @@ const DashboardPage = () => {
   // Procesar datos para gráficos
   const { tasksByStatus, overdueTasks, tasksByUser } = cardsData;
 
+  // Crear datos para los gráficos
   const statusChartData = {
     labels: Object.keys(tasksByStatus),
     datasets: [
@@ -102,8 +107,6 @@ const DashboardPage = () => {
         backgroundColor: ['#ff6384', '#4bc0c0'],
       },
     ],
-
-    
   };
 
   const statusChartOptions = {
@@ -121,16 +124,15 @@ const DashboardPage = () => {
   };
 
   return (
-    
     <Box p={4}>
       <Button
-  variant="contained"
-  color="primary"
-  onClick={() => router.push(`/workspaces/${workspaceId}/boards/${boardId}`)}
-  sx={{ position: 'absolute', top: 80, right: 16 }}
->
-  Volver al Tablero
-</Button>
+        variant="contained"
+        color="primary"
+        onClick={() => router.push(`/workspaces/${workspaceId}/boards/${boardId}`)}
+        sx={{ position: 'absolute', top: 80, right: 16 }}
+      >
+        Volver al Tablero
+      </Button>
       <Typography variant="h4" mb={4}>Dashboard de Tablero: {boardId}</Typography>
 
       {/* Contenedor de los gráficos */}
@@ -145,7 +147,7 @@ const DashboardPage = () => {
         <Grid item xs={12} md={4}>
           <Box>
             <Typography variant="h6" mb={2}>Tareas por Usuario</Typography>
-            <Bar data={userChartData} />
+            <Bar data={userChartData} options={statusChartOptions} />
           </Box>
         </Grid>
 
@@ -161,6 +163,3 @@ const DashboardPage = () => {
 };
 
 export default DashboardPage;
-
-
-

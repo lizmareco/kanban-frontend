@@ -1,13 +1,14 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/router';
 import axiosInstance from '/src/utils/axiosInstance';
-import { Box, Button, TextField, Typography, IconButton, CircularProgress, Grid, Dialog, DialogTitle, DialogContent, DialogActions, Select, MenuItem, FormControl, InputLabel } from '@mui/material';
+import { Box, Button, TextField, Typography, IconButton, CircularProgress, Grid, Dialog, DialogTitle, DialogContent, DialogActions, Select, MenuItem, FormControl, InputLabel, Alert } from '@mui/material';
 import DeleteIcon from '@mui/icons-material/Delete';
 import EditIcon from '@mui/icons-material/Edit';
 import CheckIcon from '@mui/icons-material/Check';
 import CloseIcon from '@mui/icons-material/Close';
 import CardForm from '/src/components/Board/CardForm';
 import { DragDropContext, Droppable, Draggable } from 'react-beautiful-dnd';
+import AddIcon from '@mui/icons-material/Add';
 
 const BoardPage = () => {
   const router = useRouter();
@@ -242,7 +243,16 @@ const BoardPage = () => {
         <Grid container spacing={2}>
           {lists.map((list) => (
             <Grid item key={list.id} xs={12} sm={6} md={4} lg={3}>
-              <Box p={2} border={1} borderRadius={2} borderColor="grey.300" bgcolor="white">
+              <Box
+                p={2}
+                border={1}
+                borderRadius={2}
+                borderColor="grey.300"
+                bgcolor={list.cards.length >= list.maxwip ? "rgba(255, 99, 71, 0.3)" : "white"} // Alerta WIP con fondo rojo claro si excede maxWIP
+              >
+                {list.cards.length >= list.maxwip && (
+                  <Alert severity="warning">¡Límite máximo de tareas alcanzado!</Alert>
+                )}
                 <Box display="flex" justifyContent="space-between" alignItems="center" mb={1}>
                   {editingListId === list.id ? (
                     <>
