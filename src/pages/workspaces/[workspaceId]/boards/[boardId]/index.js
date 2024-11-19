@@ -1,19 +1,43 @@
+// src/pages/workspaces/[workspaceId]/boards/[boardId]/index.js
+
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/router';
 import axiosInstance from '/src/utils/axiosInstance';
-import { Box, Button, TextField, Typography, IconButton, CircularProgress, Grid, Dialog, DialogTitle, DialogContent, DialogActions, Select, MenuItem, FormControl, InputLabel, Alert } from '@mui/material';
-import DeleteIcon from '@mui/icons-material/Delete';
+import {
+  Box,
+  Button,
+  TextField,
+  Typography,
+  IconButton,
+  CircularProgress,
+  Grid,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  Select,
+  MenuItem,
+  FormControl,
+  InputLabel,
+  Alert,
+  Menu,
+  Checkbox,
+  FormControlLabel,
+} from '@mui/material';
 import EditIcon from '@mui/icons-material/Edit';
+import DeleteIcon from '@mui/icons-material/Delete';
+import MoreVertIcon from '@mui/icons-material/MoreVert';
+import AddIcon from '@mui/icons-material/Add';
 import CheckIcon from '@mui/icons-material/Check';
 import CloseIcon from '@mui/icons-material/Close';
-import CardForm from '/src/components/Board/CardForm';
 import { DragDropContext, Droppable, Draggable } from 'react-beautiful-dnd';
-import AddIcon from '@mui/icons-material/Add';
+import CardForm from '/src/components/Board/CardForm'; // Asegúrate de que la ruta sea correcta
 
 const BoardPage = () => {
   const router = useRouter();
   const { workspaceId, boardId } = router.query;
 
+  // Estados principales
   const [lists, setLists] = useState([]);
   const [loading, setLoading] = useState(true);
   const [newListName, setNewListName] = useState('');
@@ -28,60 +52,34 @@ const BoardPage = () => {
   const [cardToDelete, setCardToDelete] = useState(null);
   const [usuarios, setUsuarios] = useState([]);
   const [etiquetas, setEtiquetas] = useState([]);
+  const [anchorEl, setAnchorEl] = useState(null);
+  const [selectedCard, setSelectedCard] = useState(null);
 
-  const handleCardAdded = async () => {
-    const res = await axiosInstance.get(`/lists/board/${boardId}`);
-    setLists(res.data);
-    setDialogOpen(false);
-  };
+  // Estados para gestión de tareas
+  const [tasks, setTasks] = useState({}); // Almacena tareas por cardId
+  const [taskDialogOpen, setTaskDialogOpen] = useState(false);
+  const [currentCardId, setCurrentCardId] = useState(null);
+  const [newTask, setNewTask] = useState({
+    nombre: '',
+    descripcion: '',
+    estado: 'open',
+    fecha_vencimiento: '',
+  });
 
-  useEffect(() => {
-    if (workspaceId && boardId) {
-      const fetchData = async () => {
-        try {
-          // Obtener las listas y tarjetas del tablero
-          const res = await axiosInstance.get(`/lists/board/${boardId}`);
-          setLists(res.data);
-
-          // Obtener usuarios del sistema
-          const usuariosRes = await axiosInstance.get('/users');
-          setUsuarios(usuariosRes.data);
-
-          // Obtener etiquetas de las tarjetas
-          const etiquetasSet = new Set();
-
-          res.data.forEach((list) => {
-            list.cards.forEach((card) => {
-              if (card.etiqueta) {
-                etiquetasSet.add(card.etiqueta);
-              }
-            });
-          });
-
-          setEtiquetas([...etiquetasSet]);
-        } catch (error) {
-          if (error.response && error.response.status === 401) {
-            alert('Sesión expirada, por favor inicia sesión nuevamente.');
-            router.push('/login');
-          }
-        } finally {
-          setLoading(false);
-        }
-      };
-      fetchData();
+  // Función para cargar tareas de una tarjeta específica
+  const loadTasks = async (cardId) => {
+    try {
+      const res = await axiosInstance.get(`/cards/${cardId}/tasks`);
+      setTasks((prev) => ({ ...prev, [cardId]: res.data }));
+    } catch (error) {
+      console.error('Error al cargar las tareas:', error);
     }
-  }, [workspaceId, boardId]);
-
-  const filtrarTarjetas = (cards = []) => {
-    return cards.filter((card) => {
-      const coincideUsuario = !usuarioFiltro || card.usuario_asignado === parseInt(usuarioFiltro);
-      const coincideEtiqueta = !etiquetaFiltro || (card.etiqueta && card.etiqueta.includes(etiquetaFiltro));
-      return coincideUsuario && coincideEtiqueta;
-    });
   };
 
+  // Función para manejar la adición de una nueva lista
   const handleAddList = async () => {
     if (!newListName || !maxWIP) {
+      alert('Por favor, completa el nombre de la lista y el máximo WIP.');
       return;
     }
     try {
@@ -90,7 +88,9 @@ const BoardPage = () => {
         maxWIP: parseInt(maxWIP, 10),
         boardId,
       });
-      setLists([...lists, res.data]);
+      // Aseguramos que la nueva lista tenga una propiedad 'cards' como arreglo vacío
+      const newList = { ...res.data, cards: [] };
+      setLists([...lists, newList]);
       setNewListName('');
       setMaxWIP('');
     } catch (error) {
@@ -98,6 +98,7 @@ const BoardPage = () => {
     }
   };
 
+  // Función para eliminar una lista
   const handleDeleteList = async (listId) => {
     try {
       await axiosInstance.delete(`/lists/${listId}`);
@@ -107,10 +108,15 @@ const BoardPage = () => {
     }
   };
 
+  // Función para cambiar el nombre de una lista
   const handleListNameChange = async () => {
     try {
       await axiosInstance.put(`/lists/${editingListId}`, { nombre: editedListName });
-      setLists(lists.map((list) => (list.id === editingListId ? { ...list, nombre: editedListName } : list)));
+      setLists(
+        lists.map((list) =>
+          list.id === editingListId ? { ...list, nombre: editedListName } : list
+        )
+      );
       setEditingListId(null);
       setEditedListName('');
     } catch (error) {
@@ -118,54 +124,265 @@ const BoardPage = () => {
     }
   };
 
+  // Función para eliminar una tarjeta
   const handleDeleteCard = async () => {
     if (!cardToDelete) return;
-
+  
     try {
       await axiosInstance.delete(`/cards/${cardToDelete.id}`);
-      setLists(lists.map((list) => ({
-        ...list,
-        cards: list.cards.filter((card) => card.id !== cardToDelete.id),
-      })));
+      setLists(
+        lists.map((list) => ({
+          ...list,
+          cards: list.cards.filter((card) => card.id !== cardToDelete.id),
+        }))
+      );
+      // Eliminar las tareas asociadas a la tarjeta eliminada
+      setTasks((prev) => {
+        const updatedTasks = { ...prev };
+        delete updatedTasks[cardToDelete.id];
+        return updatedTasks;
+      });
       setShowDeleteCardDialog(false);
       setCardToDelete(null);
     } catch (error) {
       console.error('Error al eliminar la tarjeta:', error);
+      alert('Hubo un error al eliminar la tarjeta. Por favor, intenta nuevamente.');
     }
   };
 
+  // Función para abrir el formulario de agregar tarjeta
   const handleOpenCardForm = (listId) => {
     setShowCardFormForList(listId);
     setDialogOpen(true);
   };
 
+  // Función para cerrar el diálogo de agregar tarjeta
   const handleCloseDialog = () => {
     setDialogOpen(false);
   };
 
+  // Función para manejar el drag and drop de tarjetas
   const handleDragEnd = async (result) => {
     const { destination, source, draggableId } = result;
 
     if (!destination) return;
 
-    if (destination.droppableId === source.droppableId && destination.index === source.index) {
+    if (
+      destination.droppableId === source.droppableId &&
+      destination.index === source.index
+    ) {
       return;
     }
 
     const sourceList = lists.find((list) => list.id === parseInt(source.droppableId));
-    const destinationList = lists.find((list) => list.id === parseInt(destination.droppableId));
-    const draggedCard = sourceList.cards.find((card) => card.id === parseInt(draggableId));
+    const destinationList = lists.find(
+      (list) => list.id === parseInt(destination.droppableId)
+    );
+    const draggedCard = sourceList.cards.find(
+      (card) => card.id === parseInt(draggableId)
+    );
 
+    // Remover de la lista de origen
     sourceList.cards.splice(source.index, 1);
+    // Insertar en la lista de destino
     destinationList.cards.splice(destination.index, 0, draggedCard);
 
     setLists([...lists]);
 
-    await axiosInstance.put(`/cards/${draggableId}/move`, {
-      listId: destinationList.id,
-      position: destination.index,
+    try {
+      await axiosInstance.put(`/cards/${draggableId}/move`, {
+        listId: destinationList.id,
+        position: destination.index,
+      });
+    } catch (error) {
+      console.error('Error al mover la tarjeta:', error);
+      alert('Hubo un error al mover la tarjeta. Por favor, intenta nuevamente.');
+    }
+  };
+
+  // Función para abrir el menú de opciones de una tarjeta
+  const handleMenuClick = (event, card) => {
+    setAnchorEl(event.currentTarget);
+    setSelectedCard(card);
+  };
+
+  // Función para cerrar el menú de opciones
+  const handleMenuClose = () => {
+    setAnchorEl(null);
+    setSelectedCard(null);
+  };
+
+  // Funciones para manejar la adición de tareas
+  const handleOpenTaskDialog = (cardId) => {
+    setCurrentCardId(cardId);
+    setTaskDialogOpen(true);
+  };
+
+  const handleCloseTaskDialog = () => {
+    setTaskDialogOpen(false);
+    setNewTask({
+      nombre: '',
+      descripcion: '',
+      estado: 'open',
+      fecha_vencimiento: '',
+    });
+    setCurrentCardId(null);
+  };
+
+  const handleTaskSubmit = async () => {
+    if (!newTask.nombre || !newTask.descripcion || !newTask.fecha_vencimiento) {
+      alert('Por favor, completa todos los campos de la tarea.');
+      return;
+    }
+
+    try {
+      const res = await axiosInstance.post(`/cards/${currentCardId}/tasks`, {
+        nombre: newTask.nombre,
+        descripcion: newTask.descripcion,
+        estado: 'open', // Estado por defecto "open"
+        fecha_vencimiento: newTask.fecha_vencimiento,
+      });
+      if (res.status === 200 || res.status === 201) {
+        // Actualizar el estado local sin recargar todas las listas
+        setTasks((prev) => ({
+          ...prev,
+          [currentCardId]: prev[currentCardId] ? [...prev[currentCardId], res.data] : [res.data],
+        }));
+        handleCloseTaskDialog();
+      }
+    } catch (error) {
+      console.error('Error al agregar la tarea:', error);
+      alert('Hubo un error al agregar la tarea. Por favor, intenta nuevamente.');
+    }
+  };
+
+  // Función para eliminar una tarea
+  const handleDeleteTask = async (taskId) => {
+    try {
+      await axiosInstance.delete(`/cards/tasks/${taskId}`);
+      setTasks((prev) => {
+        const updatedTasks = { ...prev };
+        for (const cardId in updatedTasks) {
+          updatedTasks[cardId] = updatedTasks[cardId].filter((task) => task.id !== taskId);
+        }
+        return updatedTasks;
+      });
+    } catch (error) {
+      console.error('Error al eliminar la tarea:', error);
+      alert('Hubo un error al eliminar la tarea. Por favor, intenta nuevamente.');
+    }
+  };
+
+  // Función para manejar el cambio de estado de una tarea (checkbox)
+  const handleToggleTaskStatus = async (task, cardId, isChecked) => {
+    const newEstado = isChecked ? 'closed' : 'open';
+
+    try {
+      const res = await axiosInstance.put(`/cards/tasks/${task.id}`, {
+        estado: newEstado,
+      });
+
+      console.log('Respuesta del backend al actualizar estado de tarea:', res.data);
+
+      setTasks((prev) => ({
+        ...prev,
+        [cardId]: (prev[cardId] || []).map((t) =>
+          t.id === task.id ? res.data : t
+        ),
+      }));
+    } catch (error) {
+      console.error('Error al actualizar el estado de la tarea:', error);
+      alert('Hubo un error al actualizar el estado de la tarea. Por favor, intenta nuevamente.');
+    }
+  };
+
+  // Función para filtrar tarjetas según los filtros aplicados
+  const filtrarTarjetas = (cards = []) => {
+    return cards.filter((card) => {
+      const coincideUsuario =
+        !usuarioFiltro || card.usuario_asignado === parseInt(usuarioFiltro);
+      const coincideEtiqueta =
+        !etiquetaFiltro ||
+        (card.etiqueta && card.etiqueta.includes(etiquetaFiltro));
+      return coincideUsuario && coincideEtiqueta;
     });
   };
+
+  // Función para manejar la recarga de listas después de agregar una tarjeta
+  const handleCardAdded = async () => {
+    try {
+      const res = await axiosInstance.get(`/lists/board/${boardId}`);
+      // Normalizar los datos para asegurarse de que cada lista tenga 'cards' como arreglo
+      const normalizedLists = res.data.map((list) => ({
+        ...list,
+        cards: Array.isArray(list.cards) ? list.cards : [],
+      }));
+      setLists(normalizedLists);
+
+      // Cargar tareas para las nuevas tarjetas
+      normalizedLists.forEach((list) => {
+        list.cards.forEach((card) => {
+          if (card.etiqueta) {
+            // etiquetasSet ya está actualizado en useEffect
+          }
+          loadTasks(card.id);
+        });
+      });
+
+      setDialogOpen(false);
+    } catch (error) {
+      console.error('Error al recargar las listas:', error);
+    }
+  };
+
+  // Cargar datos al montar el componente
+  useEffect(() => {
+    if (workspaceId && boardId) {
+      const fetchData = async () => {
+        try {
+          // Obtener las listas y tarjetas del tablero
+          const res = await axiosInstance.get(`/lists/board/${boardId}`);
+          // Normalizar los datos para asegurarse de que cada lista tenga 'cards' como arreglo
+          const normalizedLists = res.data.map((list) => ({
+            ...list,
+            cards: Array.isArray(list.cards) ? list.cards : [],
+          }));
+          setLists(normalizedLists);
+
+          // Obtener usuarios del sistema
+          const usuariosRes = await axiosInstance.get('/users');
+          setUsuarios(usuariosRes.data);
+
+          // Obtener etiquetas de las tarjetas
+          const etiquetasSet = new Set();
+
+          // Cargar tareas para cada tarjeta y recopilar etiquetas
+          await Promise.all(
+            normalizedLists.map(async (list) => {
+              list.cards.forEach((card) => {
+                if (card.etiqueta) {
+                  etiquetasSet.add(card.etiqueta);
+                }
+                loadTasks(card.id);
+              });
+            })
+          );
+
+          setEtiquetas([...etiquetasSet]);
+        } catch (error) {
+          if (error.response && error.response.status === 401) {
+            alert('Sesión expirada, por favor inicia sesión nuevamente.');
+            router.push('/login');
+          } else {
+            console.error('Error al cargar los datos:', error);
+          }
+        } finally {
+          setLoading(false);
+        }
+      };
+      fetchData();
+    }
+  }, [workspaceId, boardId]);
 
   if (loading) {
     return (
@@ -187,6 +404,7 @@ const BoardPage = () => {
             <Select
               value={usuarioFiltro}
               onChange={(e) => setUsuarioFiltro(e.target.value)}
+              label="Filtrar por usuario"
             >
               <MenuItem value="">
                 <em>Todos</em>
@@ -204,6 +422,7 @@ const BoardPage = () => {
             <Select
               value={etiquetaFiltro}
               onChange={(e) => setEtiquetaFiltro(e.target.value)}
+              label="Filtrar por etiqueta"
             >
               <MenuItem value="">
                 <em>Todas</em>
@@ -250,7 +469,7 @@ const BoardPage = () => {
                 borderColor="grey.300"
                 bgcolor={list.cards.length >= list.maxwip ? "rgba(255, 99, 71, 0.3)" : "white"} // Alerta WIP con fondo rojo claro si excede maxWIP
               >
-                {list.cards.length >= list.maxwip && (
+                {list.cards.length >= list.maxWIP && (
                   <Alert severity="warning">¡Límite máximo de tareas alcanzado!</Alert>
                 )}
                 <Box display="flex" justifyContent="space-between" alignItems="center" mb={1}>
@@ -317,9 +536,85 @@ const BoardPage = () => {
                                     </Typography>
                                   )}
                                 </Box>
-                                <IconButton color="error" onClick={() => { setShowDeleteCardDialog(true); setCardToDelete(card); }}>
-                                  <DeleteIcon />
-                                </IconButton>
+                                <Box>
+                                  <IconButton
+                                    color="primary"
+                                    onClick={(e) => handleMenuClick(e, card)}
+                                  >
+                                    <MoreVertIcon />
+                                  </IconButton>
+                                  <Menu
+                                    anchorEl={anchorEl}
+                                    open={Boolean(anchorEl) && selectedCard?.id === card.id}
+                                    onClose={handleMenuClose}
+                                  >
+                                    <MenuItem onClick={() => { handleOpenTaskDialog(card.id); handleMenuClose(); }}>
+                                      Agregar Tarea
+                                    </MenuItem>
+                                    <MenuItem onClick={() => { setShowDeleteCardDialog(true); setCardToDelete(card); handleMenuClose(); }}>
+                                      Eliminar Tarjeta
+                                    </MenuItem>
+                                  </Menu>
+                                </Box>
+                              </Box>
+
+                              {/* Lista de Tareas como Checklists */}
+                              <Box mt={2}>
+                                <Typography variant="subtitle2" gutterBottom>
+                                  Tareas:
+                                </Typography>
+                                {tasks[card.id] && tasks[card.id].length > 0 ? (
+                                  <Box>
+                                    {tasks[card.id].map((task) => (
+                                      <Box
+                                        key={task.id}
+                                        display="flex"
+                                        alignItems="center"
+                                        mb={1}
+                                        p={1}
+                                        border={1}
+                                        borderRadius={1}
+                                        borderColor="grey.200"
+                                      >
+                                        <FormControlLabel
+                                          control={
+                                            <Checkbox
+                                              checked={task.estado === 'closed'}
+                                              onChange={(e) => handleToggleTaskStatus(task, card.id, e.target.checked)}
+                                              color="primary"
+                                            />
+                                          }
+                                          label={
+                                            <Box>
+                                              <Typography variant="body2" sx={{ textDecoration: task.estado === 'closed' ? 'line-through' : 'none' }}>
+                                                {task.nombre}
+                                              </Typography>
+                                              <Typography variant="caption" color="text.secondary">
+                                                {task.descripcion}
+                                              </Typography>
+                                              <Typography variant="caption" color="text.secondary">
+                                                Vencimiento: {new Date(task.fecha_vencimiento).toLocaleDateString()}
+                                              </Typography>
+                                            </Box>
+                                          }
+                                        />
+                                        {/* Botón para eliminar la tarea */}
+                                        <IconButton
+                                          size="small"
+                                          color="error"
+                                          onClick={() => handleDeleteTask(task.id)}
+                                          sx={{ ml: 'auto' }}
+                                        >
+                                          <DeleteIcon fontSize="small" />
+                                        </IconButton>
+                                      </Box>
+                                    ))}
+                                  </Box>
+                                ) : (
+                                  <Typography variant="body2" color="text.secondary">
+                                    No hay tareas.
+                                  </Typography>
+                                )}
                               </Box>
                             </Box>
                           )}
@@ -370,12 +665,62 @@ const BoardPage = () => {
             </Button>
           </DialogActions>
         </Dialog>
+
+        {/* Diálogo para agregar una nueva tarea */}
+        <Dialog open={taskDialogOpen} onClose={handleCloseTaskDialog}>
+          <DialogTitle>Agregar Tarea</DialogTitle>
+          <DialogContent>
+            <TextField
+              label="Nombre de la Tarea"
+              value={newTask.nombre}
+              onChange={(e) =>
+                setNewTask((prev) => ({ ...prev, nombre: e.target.value }))
+              }
+              fullWidth
+              margin="normal"
+            />
+            <TextField
+              label="Descripción"
+              value={newTask.descripcion}
+              onChange={(e) =>
+                setNewTask((prev) => ({ ...prev, descripcion: e.target.value }))
+              }
+              fullWidth
+              margin="normal"
+              multiline
+              rows={3}
+            />
+            <TextField
+              label="Fecha de Vencimiento"
+              type="date"
+              value={newTask.fecha_vencimiento}
+              onChange={(e) =>
+                setNewTask((prev) => ({ ...prev, fecha_vencimiento: e.target.value }))
+              }
+              fullWidth
+              margin="normal"
+              InputLabelProps={{
+                shrink: true,
+              }}
+            />
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={handleCloseTaskDialog} color="secondary">
+              Cancelar
+            </Button>
+            <Button onClick={handleTaskSubmit} color="primary">
+              Agregar
+            </Button>
+          </DialogActions>
+        </Dialog>
       </Box>
     </DragDropContext>
   );
 };
 
 export default BoardPage;
+
+
 
 
 
