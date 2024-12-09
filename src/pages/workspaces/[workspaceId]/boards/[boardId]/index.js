@@ -31,7 +31,7 @@ import AddIcon from '@mui/icons-material/Add';
 import CheckIcon from '@mui/icons-material/Check';
 import CloseIcon from '@mui/icons-material/Close';
 import { DragDropContext, Droppable, Draggable } from 'react-beautiful-dnd';
-import CardForm from '/src/components/Board/CardForm'; // Asegúrate de que la ruta sea correcta
+import CardForm from '/src/components/Board/CardForm'; 
 
 const BoardPage = () => {
   const router = useRouter();
@@ -75,6 +75,8 @@ const BoardPage = () => {
       console.error('Error al cargar las tareas:', error);
     }
   };
+
+  
 
   // Función para manejar la adición de una nueva lista
   const handleAddList = async () => {
@@ -123,6 +125,35 @@ const BoardPage = () => {
       console.error('Error al cambiar el nombre de la lista:', error);
     }
   };
+
+// Función para recalcular usuarios y etiquetas a partir de 'lists'
+const recalcularUsuariosYEtiquetas = () => {
+  const usuariosSet = new Set();
+  const etiquetasSet = new Set();
+
+  lists.forEach((list) => {
+    list.cards.forEach((card) => {
+      if (card.usuario_nombre) {
+        usuariosSet.add(card.usuario_nombre);
+      }
+      if (card.etiqueta) {
+        etiquetasSet.add(card.etiqueta);
+      }
+    });
+  });
+
+  setUsuarios(Array.from(usuariosSet).map((nombre) => ({ nombre })));
+  setEtiquetas([...etiquetasSet]);
+};
+
+// useEffect que observa cambios en 'lists'
+useEffect(() => {
+  recalcularUsuariosYEtiquetas();
+}, [lists]);
+
+// En handleDeleteCard y handleCardAdded ya no hace falta llamar a recalcularUsuariosYEtiquetas(), 
+// pues el useEffect anterior se encargará de hacerlo cuando 'lists' cambie.
+
 
   // Función para eliminar una tarjeta
   const handleDeleteCard = async () => {
@@ -300,13 +331,17 @@ const BoardPage = () => {
   const filtrarTarjetas = (cards = []) => {
     return cards.filter((card) => {
       const coincideUsuario =
-        !usuarioFiltro || card.usuario_asignado === parseInt(usuarioFiltro);
+        !usuarioFiltro || card.usuario_nombre === usuarioFiltro;
+      
       const coincideEtiqueta =
         !etiquetaFiltro ||
-        (card.etiqueta && card.etiqueta.includes(etiquetaFiltro));
+        (card.etiqueta && card.etiqueta.trim().toLowerCase() === etiquetaFiltro.trim().toLowerCase());
+      
       return coincideUsuario && coincideEtiqueta;
     });
   };
+  
+  
 
   // Función para manejar la recarga de listas después de agregar una tarjeta
   const handleCardAdded = async () => {
@@ -335,54 +370,64 @@ const BoardPage = () => {
     }
   };
 
-  // Cargar datos al montar el componente
-  useEffect(() => {
-    if (workspaceId && boardId) {
-      const fetchData = async () => {
-        try {
-          // Obtener las listas y tarjetas del tablero
-          const res = await axiosInstance.get(`/lists/board/${boardId}`);
-          // Normalizar los datos para asegurarse de que cada lista tenga 'cards' como arreglo
-          const normalizedLists = res.data.map((list) => ({
-            ...list,
-            cards: Array.isArray(list.cards) ? list.cards : [],
-          }));
-          setLists(normalizedLists);
+  // Función para verificar si una tarjeta está atrasada
+const isCardAtrasada = (card) => {
+  if (!card.fecha_vencimiento) return false; // Si no hay fecha de vencimiento, no está atrasada
+  const hoy = new Date();
+  const fechaVencimiento = new Date(card.fecha_vencimiento);
+  return fechaVencimiento < hoy && card.estado !== 'closed'; 
+};
+useEffect(() => {
+  recalcularUsuariosYEtiquetas();
+}, [lists]);
+useEffect(() => {
+  if (workspaceId && boardId) {
+    const fetchData = async () => {
+      try {
+        // Obtener las listas y tarjetas del tablero
+        const res = await axiosInstance.get(`/lists/board/${boardId}`);
+        const normalizedLists = res.data.map((list) => ({
+          ...list,
+          cards: Array.isArray(list.cards) ? list.cards : [],
+        }));
+        setLists(normalizedLists);
 
-          // Obtener usuarios del sistema
-          const usuariosRes = await axiosInstance.get('/users');
-          setUsuarios(usuariosRes.data);
+        // Construir un conjunto con los nombres de usuarios asignados a las tarjetas
+        const usuariosSet = new Set();
+        const etiquetasSet = new Set();
 
-          // Obtener etiquetas de las tarjetas
-          const etiquetasSet = new Set();
+        await Promise.all(
+          normalizedLists.map(async (list) => {
+            list.cards.forEach((card) => {
+              if (card.usuario_nombre) {
+                usuariosSet.add(card.usuario_nombre);
+              }
+              if (card.etiqueta) {
+                etiquetasSet.add(card.etiqueta);
+              }
+              loadTasks(card.id);
+            });
+          })
+        );
 
-          // Cargar tareas para cada tarjeta y recopilar etiquetas
-          await Promise.all(
-            normalizedLists.map(async (list) => {
-              list.cards.forEach((card) => {
-                if (card.etiqueta) {
-                  etiquetasSet.add(card.etiqueta);
-                }
-                loadTasks(card.id);
-              });
-            })
-          );
-
-          setEtiquetas([...etiquetasSet]);
-        } catch (error) {
-          if (error.response && error.response.status === 401) {
-            alert('Sesión expirada, por favor inicia sesión nuevamente.');
-            router.push('/login');
-          } else {
-            console.error('Error al cargar los datos:', error);
-          }
-        } finally {
-          setLoading(false);
+        // Convertir Set en array
+        setUsuarios(Array.from(usuariosSet).map((nombre) => ({ nombre })));
+        setEtiquetas([...etiquetasSet]);
+      } catch (error) {
+        if (error.response && error.response.status === 401) {
+          alert('Sesión expirada, por favor inicia sesión nuevamente.');
+          router.push('/login');
+        } else {
+          console.error('Error al cargar los datos:', error);
         }
-      };
-      fetchData();
-    }
-  }, [workspaceId, boardId]);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchData();
+  }
+}, [workspaceId, boardId]);
+
 
   if (loading) {
     return (
@@ -397,9 +442,9 @@ const BoardPage = () => {
       <Box p={4}>
         <Typography variant="h4" mb={4}>Tablero: {boardId}</Typography>
 
-        {/* Filtros para tareas */}
-        <Box display="flex" mb={2}>
-          <FormControl margin="normal" sx={{ mr: 1, width: '150px' }}>
+         {/* Filtros para tareas */}
+         <Box display="flex" mb={2}>
+         <FormControl margin="normal" sx={{ mr: 1, width: '150px' }}>
             <InputLabel>Filtrar por usuario</InputLabel>
             <Select
               value={usuarioFiltro}
@@ -426,7 +471,7 @@ const BoardPage = () => {
             >
               <MenuItem value="">
                 <em>Todas</em>
-              </MenuItem>
+                </MenuItem>
               {etiquetas.map((etiqueta) => (
                 <MenuItem key={etiqueta} value={etiqueta}>
                   {etiqueta}
@@ -469,7 +514,7 @@ const BoardPage = () => {
                 borderColor="grey.300"
                 bgcolor={list.cards.length >= list.maxwip ? "rgba(255, 99, 71, 0.3)" : "white"} // Alerta WIP con fondo rojo claro si excede maxWIP
               >
-                {list.cards.length >= list.maxWIP && (
+                {list.cards.length >= list.maxwip && (
                   <Alert severity="warning">¡Límite máximo de tareas alcanzado!</Alert>
                 )}
                 <Box display="flex" justifyContent="space-between" alignItems="center" mb={1}>
@@ -520,21 +565,60 @@ const BoardPage = () => {
                               border={1}
                               borderRadius={2}
                               borderColor="grey.300"
-                              bgcolor="rgba(255, 235, 59, 0.3)"
+                              bgcolor={isCardAtrasada(card) ? "rgba(255, 99, 71, 0.3)" : "rgba(255, 235, 59, 0.3)"} // Alerta de tarea atrasada
                             >
                               <Box display="flex" justifyContent="space-between" alignItems="center">
                                 <Box>
+                                  {/* Nombre */}
+                                  <Typography variant="subtitle2" color="text.secondary">Nombre:</Typography>
                                   <Typography variant="body1" noWrap>{card.nombre}</Typography>
+
+                                  {/* Descripción */}
+                                  <Typography variant="subtitle2" color="text.secondary">Descripción:</Typography>
                                   <Typography variant="body2" noWrap>{card.descripcion}</Typography>
-                                  {card.etiqueta && <Typography variant="body2">Etiqueta: {card.etiqueta}</Typography>}
+
+                                  {/* Fecha de Creación */}
+                                  {card.fecha_creacion && (
+                                  <>
+                                  <Typography variant="subtitle2" color="text.secondary">Fecha de Creación:</Typography>
+                                  <Typography variant="body2">
+                                  {new Date(card.fecha_creacion).toLocaleDateString()}
+                                  </Typography>
+                                  </>
+                                  )}
+
+                                  {/* Fecha de Vencimiento */}
+                                  {card.fecha_vencimiento && (
+                                  <>
+                                  <Typography variant="subtitle2" color="text.secondary">Fecha de Vencimiento:</Typography>
+                                  <Typography variant="body2">
+                                    {new Date(card.fecha_vencimiento).toLocaleDateString()}
+                                  </Typography>
+                                  </>
+                                  )}
+
+                                  {/* Usuario asignado */}
                                   {card.usuario_nombre && (
-                                    <Typography variant="body2">Asignado a: {card.usuario_nombre}</Typography>
+                                  <>
+                                      <Typography variant="subtitle2" color="text.secondary">Asignado a:</Typography>
+                                      <Typography variant="body2">{card.usuario_nombre}</Typography>
+                                  </>
                                   )}
-                                  {card.atrasada && (
-                                    <Typography variant="body2" color="error">
-                                      ¡Atrasada!
-                                    </Typography>
-                                  )}
+
+                                {/* Etiqueta */}
+                                {card.etiqueta && (
+                                <>
+                                  <Typography variant="subtitle2" color="text.secondary">Etiqueta:</Typography>
+                                  <Typography variant="body2">{card.etiqueta}</Typography>
+                                </>
+                                )}
+                   
+                                  {/* Atrasada */}
+                                  {isCardAtrasada(card) && (
+                                  <Typography variant="body2" color="error" sx={{ mt: 1 }}>
+                                  ¡Atrasada!
+                                  </Typography>
+                                    )}
                                 </Box>
                                 <Box>
                                   <IconButton

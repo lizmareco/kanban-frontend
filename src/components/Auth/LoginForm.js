@@ -3,14 +3,8 @@ import { useForm } from 'react-hook-form';
 import * as yup from 'yup';
 import { yupResolver } from '@hookform/resolvers/yup';
 import { useContext } from 'react';
-//import AuthContext from '../../context/AuthContext';
 import { AuthContext } from '../../context/AuthContext';
-import { useRouter } from 'next/router';
-import { toast } from 'react-toastify';
-import Link from 'next/link'; // Importamos Link de Next.js
-
-
-
+import Link from 'next/link';
 
 const schema = yup.object().shape({
   email: yup.string().email('Email inválido').required('El email es obligatorio'),
@@ -23,18 +17,14 @@ const LoginForm = () => {
     register,
     handleSubmit,
     formState: { errors },
-  } = useForm({
-    resolver: yupResolver(schema),
-  });
-  const router = useRouter();
+  } = useForm({ resolver: yupResolver(schema) });
 
   const onSubmit = async (data) => {
-    try {
-      await loginUser(data.email, data.password);
-      router.push('/workspaces'); // Redirige al usuario después de iniciar sesión
-    } catch (error) {
-      toast.error('Credenciales incorrectas');
-    }
+    console.log('Formulario enviado con:', data);
+    const result = await loginUser(data.email, data.password);
+    console.log('Resultado de loginUser:', result);
+    // Si result.success es false, ya se mostró el mensaje de error en AuthContext.js
+    // No hace falta lanzar otro error ni hacer otro toast.error aquí.
   };
 
   return (
@@ -49,14 +39,21 @@ const LoginForm = () => {
       <button type="submit" className="submit-button">Iniciar Sesión</button>
 
       <p className="register-link">
-        ¿No tienes una cuenta?{' '}
-        <Link href="/register">Regístrate aquí</Link>
+        ¿No tienes una cuenta? <Link href="/register">Regístrate aquí</Link>
       </p>
     </form>
   );
 };
 
 export default LoginForm;
+
+
+
+
+
+
+
+
 
 
 

@@ -1,14 +1,11 @@
 // src/context/AuthContext.js
 import React, { createContext, useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
-import axios from 'axios'; // Asegúrate de importar axios
 import axiosInstance from '../utils/axiosInstance';
 import { toast } from 'react-toastify';
 
-// Crear el contexto de autenticación
 export const AuthContext = createContext();
 
-// Proveedor del contexto de autenticación
 export const AuthProvider = ({ children }) => {
   const router = useRouter();
   const [user, setUser] = useState(null);
@@ -16,7 +13,6 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // Cargar el token y el usuario desde el Local Storage al iniciar
   useEffect(() => {
     const storedToken = localStorage.getItem('token');
     const storedUser = localStorage.getItem('user');
@@ -29,49 +25,44 @@ export const AuthProvider = ({ children }) => {
     setLoading(false);
   }, []);
 
-  // Función para iniciar sesión
-  const loginUser = async (email, password) => {
-    try {
-      console.log('Intentando iniciar sesión con:', { email, password });
-      const response = await axios.post('http://localhost:3001/auth/login', {
-        email,
-        password,
-      }, {
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
-      console.log('Login exitoso:', response.data);
+ // Función para iniciar sesión en AuthContext.js
+const loginUser = async (email, password) => {
+  try {
+    console.log('Intentando iniciar sesión con:', { email, password });
+    const response = await axiosInstance.post('/auth/login', { email, password });
+    console.log('Login exitoso:', response.data);
 
-      const { token, user } = response.data;
+    const { token, user } = response.data;
 
-      // Guardar token y usuario en el estado y en Local Storage
-      setToken(token);
-      setUser(user);
-      localStorage.setItem('token', token);
-      localStorage.setItem('user', JSON.stringify(user));
+    setToken(token);
+    setUser(user);
+    localStorage.setItem('token', token);
+    localStorage.setItem('user', JSON.stringify(user));
 
-      // Mostrar notificación de éxito
-      toast.success('Inicio de sesión exitoso.');
+    toast.success('Inicio de sesión exitoso.');
+    router.push('/workspaces');
 
-      // Redirigir al usuario a la página principal o a donde desees
-      router.push('/workspaces');
-    } catch (err) {
-      console.error('Error en el login:', err);
+    return { success: true };
+  } catch (err) {
+    console.log('Entró al catch de loginUser');
+    console.error('Error en el login:', err.message);
 
-      // Manejar errores y mostrar notificación
-      if (err.response && err.response.data) {
-        const errorMsg = err.response.data.msg || 'Error en el inicio de sesión.';
-        setError(errorMsg);
-        toast.error(errorMsg);
-      } else {
-        setError('Error en el inicio de sesión. Por favor, intenta nuevamente.');
-        toast.error('Error en el inicio de sesión. Por favor, intenta nuevamente.');
-      }
+    if (err.response && err.response.data) {
+      const errorMsg = err.response.data.msg || 'Error en el inicio de sesión.';
+      setError(errorMsg);
+      toast.error(errorMsg);
+      // IMPORTANT: No lanzar error.
+      return { success: false, message: errorMsg };
+    } else {
+      const genericError = 'Error en el inicio de sesión. Por favor, intenta nuevamente.';
+      setError(genericError);
+      toast.error(genericError);
+      return { success: false, message: genericError };
     }
-  };
+  }
+};
 
-  // Función para registrar un nuevo usuario
+
   const registerUser = async (nombre, email, password) => {
     try {
       const response = await axiosInstance.post('/auth/register', {
@@ -80,19 +71,19 @@ export const AuthProvider = ({ children }) => {
         password,
       });
       toast.success('Registro exitoso. Por favor, inicia sesión.');
-      return response.data;
+      return { success: true };
     } catch (error) {
       if (error.response) {
         console.error('Error en registerUser:', error.response.data);
-        throw error; // Lanzar el error para que el componente `RegisterForm.js` lo maneje
+        toast.error(error.response.data.msg || 'Error en el registro.');
       } else {
-        toast.error('Error en el servidor. Intenta nuevamente.');
-        throw error;
+        const genericError = 'Error en el servidor. Intenta nuevamente.';
+        console.error('Error en registerUser:', genericError);
+        toast.error(genericError);
       }
     }
   };
 
-  // Función para cerrar sesión
   const logoutUser = () => {
     setToken(null);
     setUser(null);
@@ -109,6 +100,14 @@ export const AuthProvider = ({ children }) => {
 };
 
 export default AuthContext;
+
+
+
+
+
+
+
+
 
 
 

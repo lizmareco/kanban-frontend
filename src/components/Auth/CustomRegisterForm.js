@@ -1,4 +1,4 @@
-// src/components/Auth/RegisterForm.js
+// src/components/Auth/CustomRegisterForm.js
 
 import { useForm } from 'react-hook-form';
 import * as yup from 'yup';
@@ -6,9 +6,15 @@ import { yupResolver } from '@hookform/resolvers/yup';
 import { useContext, useState } from 'react';
 import { AuthContext } from '../../context/AuthContext';
 import { useRouter } from 'next/router';
-import Link from 'next/link';
-import { Box, Button, TextField, Typography } from '@mui/material';
-import { toast } from 'react-toastify'; // Importar toast de react-toastify
+import {
+  Box,
+  Button,
+  TextField,
+  Typography,
+  CircularProgress,
+  Alert,
+} from '@mui/material';
+import { toast } from 'react-toastify'; // Asegúrate de haber importado react-toastify si lo necesitas
 
 const schema = yup.object().shape({
   nombre: yup.string().required('El nombre es obligatorio'),
@@ -23,7 +29,7 @@ const schema = yup.object().shape({
     .required('Confirma tu contraseña'),
 });
 
-const RegisterForm = () => {
+const CustomRegisterForm = () => {
   const { registerUser } = useContext(AuthContext);
   const {
     register,
@@ -34,34 +40,36 @@ const RegisterForm = () => {
   });
   const router = useRouter();
   const [loading, setLoading] = useState(false);
+  const [alertMessage, setAlertMessage] = useState({ type: '', text: '' });
+
+  const handleAlert = (type, message) => {
+    setAlertMessage({ type, text: message });
+    // Si quieres que la alerta desaparezca luego de unos segundos:
+    setTimeout(() => {
+      setAlertMessage({ type: '', text: '' });
+    }, 5000);
+  };
 
   const onSubmit = async (data) => {
     setLoading(true);
     try {
-      console.log('Datos del formulario:', data);
-
-      // registerUser lanza error si algo falla, por eso mantenemos el try-catch
       await registerUser(data.nombre, data.email, data.password);
-
-      // Como el registro fue exitoso, mostramos un toast de éxito
-      toast.success('Registro exitoso. Por favor, inicia sesión.');
-      router.push('/login');
+      handleAlert('success', 'Registro exitoso.');
+      // No redirigir aquí, lo haremos en el finally
+      router.push('/workspaces');
     } catch (error) {
-      console.error('Error capturado en RegisterForm:', error.response ? error.response.data : error.message);
-      // Aquí manejamos el error lanzado por registerUser
+      console.error('Error capturado en CustomRegisterForm:', error);
       if (error.response) {
         if (error.response.status === 400) {
           const errorMessage = error.response.data.msg || 'Error en la solicitud';
-          toast.error(errorMessage); // Mostrar error con toast.error
+          handleAlert('error', errorMessage);
         } else {
-          toast.error('Error del servidor. Por favor, intenta más tarde.');
+          handleAlert('error', 'Error del servidor. Por favor, intenta más tarde.');
         }
       } else {
-        toast.error('Error al realizar la solicitud. Por favor, verifica tu conexión.');
+        handleAlert('error', 'Error al realizar la solicitud. Por favor, verifica tu conexión.');
       }
-    } finally {
-      setLoading(false);
-    }
+    } 
   };
 
   return (
@@ -78,8 +86,14 @@ const RegisterForm = () => {
       }}
     >
       <Typography variant="h5" align="center" gutterBottom>
-        Regístrate
+        Registrar nuevo usuario
       </Typography>
+
+      {alertMessage.text && (
+        <Alert severity={alertMessage.type} sx={{ mb: 2 }}>
+          {alertMessage.text}
+        </Alert>
+      )}
 
       <TextField
         label="Nombre"
@@ -132,27 +146,12 @@ const RegisterForm = () => {
         sx={{ mt: 2 }}
         disabled={loading}
       >
-        {loading ? 'Registrando...' : 'Registrarse'}
+        {loading ? <CircularProgress size={24} /> : 'Registrar usuario'}
       </Button>
-
-      <Typography variant="body2" align="center" sx={{ mt: 2 }}>
-        ¿Ya tienes una cuenta?{' '}
-        <Link href="/login">Inicia sesión aquí</Link>
-      </Typography>
     </Box>
   );
 };
 
-export default RegisterForm;
-
-
-
-
-
-
-
-
-
-
+export default CustomRegisterForm;
 
 
