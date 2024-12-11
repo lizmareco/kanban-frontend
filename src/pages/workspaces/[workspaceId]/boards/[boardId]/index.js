@@ -38,6 +38,7 @@ const BoardPage = () => {
   const { workspaceId, boardId } = router.query;
 
   // Estados principales
+  const [boardName, setBoardName] = useState('');
   const [lists, setLists] = useState([]);
   const [loading, setLoading] = useState(true);
   const [newListName, setNewListName] = useState('');
@@ -428,6 +429,23 @@ useEffect(() => {
   }
 }, [workspaceId, boardId]);
 
+useEffect(() => {
+  const fetchBoardName = async () => {
+    try {
+      // Realizar una solicitud al backend para obtener los detalles del tablero
+      const res = await axiosInstance.get(`/boards/${boardId}`);
+      setBoardName(res.data.nombre); // Asumimos que `nombre` es el campo del nombre en la respuesta
+    } catch (error) {
+      console.error('Error al obtener el nombre del tablero:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (boardId) {
+    fetchBoardName();
+  }
+}, [boardId]);
 
   if (loading) {
     return (
@@ -440,7 +458,7 @@ useEffect(() => {
   return (
     <DragDropContext onDragEnd={handleDragEnd}>
       <Box p={4}>
-        <Typography variant="h4" mb={4}>Tablero: {boardId}</Typography>
+        <Typography variant="h4" mb={4}> Tablero: {boardName || 'Cargando...'}</Typography>
 
          {/* Filtros para tareas */}
          <Box display="flex" mb={2}>
@@ -512,7 +530,7 @@ useEffect(() => {
                 border={1}
                 borderRadius={2}
                 borderColor="grey.300"
-                bgcolor={list.cards.length >= list.maxwip ? "rgba(255, 99, 71, 0.3)" : "white"} // Alerta WIP con fondo rojo claro si excede maxWIP
+                bgcolor={list.cards.length >= list.maxwip ? "rgba(255, 99, 71, 0.3)" : "rgba(144, 238, 144, 0.3)"} // Alerta WIP con fondo rojo claro si excede maxWIP
               >
                 {list.cards.length >= list.maxwip && (
                   <Alert severity="warning">¡Límite máximo de tareas alcanzado!</Alert>
