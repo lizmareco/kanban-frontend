@@ -4,17 +4,17 @@ import { useEffect, useState } from 'react';
 import axiosInstance from '../../utils/axiosInstance';
 import { Box, Button, TextField, Typography, CircularProgress, Select, MenuItem, InputLabel, FormControl } from '@mui/material';
 
-const CardForm = ({ listId, onCardAdded }) => {
-  const { register, handleSubmit, formState: { errors }, setValue } = useForm();
+const CardForm = ({ listId, onCardAdded, workspaceId }) => {
+  const { register, handleSubmit, formState: { errors } } = useForm();
   const [usuarios, setUsuarios] = useState([]);
   const [usuarioAsignado, setUsuarioAsignado] = useState('');
   const [loading, setLoading] = useState(true);
 
-  // Obtener la lista de usuarios asignados al tablero
+  // Obtener la lista de usuarios asignados al workspace actual
   useEffect(() => {
     const fetchUsuarios = async () => {
       try {
-        const res = await axiosInstance.get('/users'); // Aquí puedes ajustar la URL para que filtre solo los usuarios del tablero o espacio de trabajo actual
+        const res = await axiosInstance.get(`/workspaces/${workspaceId}/users`); 
         setUsuarios(res.data);
       } catch (err) {
         console.error('Error al obtener los usuarios:', err);
@@ -23,23 +23,21 @@ const CardForm = ({ listId, onCardAdded }) => {
       }
     };
     fetchUsuarios();
-  }, []);
+  }, [workspaceId]);
 
   const onSubmit = async (data) => {
     const today = new Date();
     const selectedDate = new Date(data.fecha_vencimiento);
 
-    // Validar que la fecha seleccionada no sea anterior a hoy
     if (selectedDate < today.setHours(0, 0, 0, 0)) {
       alert("La fecha de vencimiento no puede ser anterior a la fecha actual.");
       return;
     }
 
     try {
-      /// Mostrar en la consola el contenido que se va a enviar
       console.log('Datos enviados al backend:', { ...data, lista_id: listId, usuario_asignado: usuarioAsignado });
       await axiosInstance.post('/cards', { ...data, lista_id: listId, usuario_asignado: usuarioAsignado });
-      onCardAdded(); // Notificar al componente padre que se agregó una tarjeta
+      onCardAdded();
     } catch (error) {
       console.error('Error al agregar tarjeta:', error);
     }
@@ -116,7 +114,7 @@ const CardForm = ({ listId, onCardAdded }) => {
         >
           {usuarios.map((usuario) => (
             <MenuItem key={usuario.id} value={usuario.id}>
-              {usuario.nombre} ({usuario.email})
+              {usuario.nombre}
             </MenuItem>
           ))}
         </Select>
@@ -130,6 +128,7 @@ const CardForm = ({ listId, onCardAdded }) => {
 };
 
 export default CardForm;
+
 
 
 

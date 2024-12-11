@@ -455,7 +455,7 @@ useEffect(() => {
                 <em>Todos</em>
               </MenuItem>
               {usuarios.map((usuario) => (
-                <MenuItem key={usuario.id} value={usuario.id}>
+                <MenuItem key={usuario.id} value={usuario.nombre}>
                   {usuario.nombre}
                 </MenuItem>
               ))}
@@ -726,7 +726,7 @@ useEffect(() => {
           <DialogTitle>Agregar Tarjeta</DialogTitle>
           <DialogContent>
             {showCardFormForList && (
-              <CardForm listId={showCardFormForList} onCardAdded={handleCardAdded} />
+              <CardForm listId={showCardFormForList} onCardAdded={handleCardAdded} workspaceId={workspaceId} />
             )}
           </DialogContent>
           <DialogActions>
