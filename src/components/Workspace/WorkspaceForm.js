@@ -1,27 +1,30 @@
 // src/components/Workspace/WorkspaceForm.js
 
 import { useForm } from 'react-hook-form';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useContext } from 'react';
 import axiosInstance from '../../utils/axiosInstance';
 import { useRouter } from 'next/router';
 import { toast } from 'react-toastify';
 import { TextField, Button, Box, Typography, MenuItem, CircularProgress, Select, InputLabel, FormControl } from '@mui/material';
+import { AuthContext } from '../../context/AuthContext'; // Asegúrate de que el contexto esté configurado
 
 const WorkspaceForm = () => {
   const router = useRouter();
+  const { user } = useContext(AuthContext); // Obtener usuario autenticado del contexto
   const [usuarios, setUsuarios] = useState([]);
   const [usuariosAsignados, setUsuariosAsignados] = useState([]);
   const [loading, setLoading] = useState(true);
-  
+
   const { register, handleSubmit, formState: { errors } } = useForm();
 
   // Obtener la lista de usuarios disponibles
   useEffect(() => {
     const fetchUsuarios = async () => {
+      if (!user || !user.id) return; // Asegúrate de que el usuario esté definido antes de continuar
       try {
-        console.log('Intentando obtener usuarios. Token:', localStorage.getItem('token'));
-        const res = await axiosInstance.get('http://localhost:3001/users');
-        setUsuarios(res.data);
+        const res = await axiosInstance.get('/users');
+        const usuariosFiltrados = res.data.filter((usuario) => usuario.id !== user.id);
+        setUsuarios(usuariosFiltrados);
       } catch (err) {
         console.error('Error al obtener los usuarios:', err);
       } finally {
@@ -29,16 +32,16 @@ const WorkspaceForm = () => {
       }
     };
     fetchUsuarios();
-  }, []);
-  
+  }, [user]); // Dependencia: se asegura de que `user` esté disponible antes de ejecutar
 
   // Manejar el envío del formulario
   const onSubmit = async (data) => {
     try {
-      // Enviar solicitud POST para crear el espacio de trabajo con los usuarios asignados
-      await axiosInstance.post('/workspaces', { ...data, usuariosAsignados });
-      
-      // Mostrar notificación de éxito
+      // Incluir al creador del espacio en los usuarios asignados
+      const usuariosFinales = [...usuariosAsignados, user?.id];
+
+      await axiosInstance.post('/workspaces', { ...data, usuariosAsignados: usuariosFinales });
+
       toast.success('Espacio de trabajo creado exitosamente.');
       router.push('/workspaces');
     } catch (err) {
@@ -81,10 +84,14 @@ const WorkspaceForm = () => {
             multiple
             value={usuariosAsignados}
             onChange={(e) => setUsuariosAsignados(e.target.value)}
-            renderValue={(selected) => selected.map((userId) => {
-              const user = usuarios.find(u => u.id === userId);
-              return user ? `${user.nombre} (${user.email})` : '';
-            }).join(', ')}
+            renderValue={(selected) =>
+              selected
+                .map((userId) => {
+                  const user = usuarios.find((u) => u.id === userId);
+                  return user ? `${user.nombre} (${user.email})` : '';
+                })
+                .join(', ')
+            }
           >
             {usuarios.map((usuario) => (
               <MenuItem key={usuario.id} value={usuario.id}>
@@ -103,6 +110,8 @@ const WorkspaceForm = () => {
 };
 
 export default WorkspaceForm;
+
+
 
 
 

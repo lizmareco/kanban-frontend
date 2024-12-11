@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useContext } from 'react';
 import axiosInstance from '../../utils/axiosInstance';
 import { useRouter } from 'next/router';
 import { toast } from 'react-toastify';
@@ -6,13 +6,14 @@ import { Grid, Card, CardContent, Typography, Button, Box, CircularProgress, Ico
 import EditIcon from '@mui/icons-material/Edit';
 import CloseIcon from '@mui/icons-material/Close';
 import CheckIcon from '@mui/icons-material/Check';
+import { AuthContext } from '../../context/AuthContext';
 
 const WorkspaceList = () => {
   const [workspaces, setWorkspaces] = useState([]);
   const [loading, setLoading] = useState(true);
+  const { user } = useContext(AuthContext); // Obtener el usuario autenticado
   const router = useRouter();
 
-  // Estados para edición del nombre del workspace
   const [editingWorkspaceId, setEditingWorkspaceId] = useState(null);
   const [editedWorkspaceName, setEditedWorkspaceName] = useState('');
 
@@ -24,7 +25,7 @@ const WorkspaceList = () => {
       } catch (error) {
         if (error.response && error.response.status === 401) {
           toast.error('No autorizado. Por favor, inicia sesión nuevamente.');
-          router.push('/login'); 
+          router.push('/login');
         } else {
           console.error('Error al obtener los espacios de trabajo:', error);
         }
@@ -45,26 +46,25 @@ const WorkspaceList = () => {
     try {
       await axiosInstance.put(`/workspaces/${workspaceId}/deactivate`);
       toast.success('Espacio de trabajo inactivado correctamente.');
-      setWorkspaces((prevWorkspaces) => prevWorkspaces.filter((workspace) => workspace.id !== workspaceId));
+      setWorkspaces((prevWorkspaces) =>
+        prevWorkspaces.filter((workspace) => workspace.id !== workspaceId)
+      );
     } catch (error) {
       console.error('Error al inactivar el espacio de trabajo:', error);
       toast.error('Error al inactivar el espacio de trabajo.');
     }
   };
 
-  // Función para iniciar la edición del nombre del workspace
   const startEditingWorkspaceName = (workspace) => {
     setEditingWorkspaceId(workspace.id);
     setEditedWorkspaceName(workspace.nombre);
   };
 
-  // Función para cancelar la edición del nombre del workspace
   const cancelEditingWorkspaceName = () => {
     setEditingWorkspaceId(null);
     setEditedWorkspaceName('');
   };
 
-  // Función para guardar el nombre del workspace editado
   const handleWorkspaceNameChange = async () => {
     if (!editedWorkspaceName.trim()) {
       toast.error('El nombre no puede estar vacío.');
@@ -73,12 +73,13 @@ const WorkspaceList = () => {
 
     try {
       await axiosInstance.put(`/workspaces/${editingWorkspaceId}`, {
-        nombre: editedWorkspaceName.trim()
+        nombre: editedWorkspaceName.trim(),
       });
-      // Actualizar el nombre del workspace en el estado local
       setWorkspaces((prev) =>
         prev.map((ws) =>
-          ws.id === editingWorkspaceId ? { ...ws, nombre: editedWorkspaceName.trim() } : ws
+          ws.id === editingWorkspaceId
+            ? { ...ws, nombre: editedWorkspaceName.trim() }
+            : ws
         )
       );
       toast.success('Nombre del espacio de trabajo actualizado.');
@@ -128,7 +129,10 @@ const WorkspaceList = () => {
                     <Typography variant="h5" component="div" noWrap>
                       {workspace.nombre}
                     </Typography>
-                    <IconButton color="primary" onClick={() => startEditingWorkspaceName(workspace)}>
+                    <IconButton
+                      color="primary"
+                      onClick={() => startEditingWorkspaceName(workspace)}
+                    >
                       <EditIcon />
                     </IconButton>
                   </Box>
@@ -145,13 +149,16 @@ const WorkspaceList = () => {
                 >
                   Ver Tablero
                 </Button>
-                <Button
-                  variant="outlined"
-                  color="warning"
-                  onClick={() => handleInactivateWorkspace(workspace.id)}
-                >
-                  Inactivar
-                </Button>
+                {/* Mostrar botón Inactivar solo si el usuario es el propietario */}
+                {user && workspace.creador_id === user.id && (
+                  <Button
+                    variant="outlined"
+                    color="warning"
+                    onClick={() => handleInactivateWorkspace(workspace.id)}
+                  >
+                    Inactivar
+                  </Button>
+                )}
               </CardContent>
             </Card>
           </Grid>
@@ -162,6 +169,7 @@ const WorkspaceList = () => {
 };
 
 export default WorkspaceList;
+
 
 
 

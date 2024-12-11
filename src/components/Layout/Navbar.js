@@ -14,7 +14,7 @@ import {
 } from '@mui/material';
 import MenuIcon from '@mui/icons-material/Menu';
 import { AuthContext } from '../../context/AuthContext';
-import PersonAddIcon from '@mui/icons-material/PersonAdd'; // Importa el ícono si lo usas
+import PersonAddIcon from '@mui/icons-material/PersonAdd'; 
 import DashboardIcon from '@mui/icons-material/Dashboard';
 
 const Navbar = () => {
@@ -101,9 +101,11 @@ const Navbar = () => {
 
         {/* Espacios de Trabajo */}
         <Typography variant="body1" color="inherit" sx={{ mr: 2 }}>
+        {router.pathname !== '/login' && router.pathname !== '/register' && (
           <Link href="/workspaces" passHref>
             <Button color="inherit">Espacios de Trabajo</Button>
           </Link>
+        )}
         </Typography>
 
         {/* Mostrar si el usuario está autenticado */}
@@ -118,9 +120,11 @@ const Navbar = () => {
           </>
         ) : (
           <Typography variant="body1" color="inherit" sx={{ mr: 2 }}>
+            {router.pathname !== '/login' && router.pathname !== '/register' && (
             <Link href="/login" passHref>
               <Button color="inherit">Iniciar Sesión</Button>
             </Link>
+            )}
           </Typography>
         )}
       </Toolbar>
